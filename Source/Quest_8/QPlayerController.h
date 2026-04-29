@@ -85,6 +85,7 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "HUD")
 	UUserWidget* GetHUDWidget() const;
+	void UpdatePlayerRotation();
 	virtual void Tick(float DeltaSeconds) override;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Combat")

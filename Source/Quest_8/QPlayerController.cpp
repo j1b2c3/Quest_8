@@ -383,9 +383,34 @@ UUserWidget* AQPlayerController::GetHUDWidget() const
 	return HUDWidgetInstance;
 }
 
+void AQPlayerController::UpdatePlayerRotation()
+{
+	APawn* ControlledPawn = GetPawn();
+	if (!ControlledPawn)
+	{
+		return;
+	}
+
+	FVector WorldLocation, WorldDirection;
+	float MouseX, MouseY;
+	GetMousePosition(MouseX, MouseY);
+	DeprojectScreenPositionToWorld(MouseX, MouseY, WorldLocation, WorldDirection);
+
+	FVector PawnLocation = ControlledPawn->GetActorLocation();
+	FVector MouseWorldPosition = WorldLocation + WorldDirection * 10000.0f;
+	MouseWorldPosition.Z = PawnLocation.Z;
+
+	FVector DirectionToMouse = (MouseWorldPosition - PawnLocation).GetSafeNormal();
+	FRotator TargetRotation = DirectionToMouse.Rotation();
+
+	ControlledPawn->SetActorRotation(TargetRotation);
+}
+
 void AQPlayerController::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+
+	UpdatePlayerRotation();
 
 	if (CrosshairWidgetInstance && IsValid(CrosshairWidgetInstance))
 	{
