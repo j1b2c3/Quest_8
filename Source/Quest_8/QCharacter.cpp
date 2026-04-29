@@ -80,7 +80,8 @@ float AQCharacter::TakeDamage(float DamageAmount, const struct FDamageEvent& Dam
 
 	if (Health <= 0.0f)
 	{
-		OnDeath();
+		FTimerHandle DeathTimerHandle;
+		GetWorldTimerManager().SetTimer(DeathTimerHandle, this, &AQCharacter::OnDeath, 1.0f, false);
 	}
 
 	return ActualDamage;
