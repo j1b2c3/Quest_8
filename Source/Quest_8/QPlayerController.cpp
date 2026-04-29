@@ -97,10 +97,7 @@ void AQPlayerController::SetupInputComponent()
 		EnhancedInputComponent->BindAction(SetShootAction, ETriggerEvent::Triggered, this,
 		                                   &AQPlayerController::OnFire);
 	}
-	else
-	{
-		UE_LOG(LogTemplateCharacter, Error, TEXT("Input Error"));
-	}
+
 }
 
 void AQPlayerController::ClearWidget()
@@ -144,7 +141,7 @@ void AQPlayerController::RecoverCrosshairSpread()
 
 void AQPlayerController::OnFire()
 {
-	float CurrentTime = GetWorld()->GetTimeSeconds();
+	const float CurrentTime = GetWorld()->GetTimeSeconds();
 	if (CurrentTime - LastFireTime < FireCooldown)
 	{
 		return;
@@ -167,54 +164,55 @@ void AQPlayerController::OnFire()
 		UGameplayStatics::PlaySoundAtLocation(this, LaserSound, ControlledPawn->GetActorLocation());
 	}
 
-	CurrentCrosshairSpreadMultiplier = FMath::Min(CurrentCrosshairSpreadMultiplier + CrosshairSpreadIncrement,
-	                                              MaxCrosshairSpreadMultiplier);
+	CurrentCrosshairSpreadMultiplier = FMath::Min(
+		CurrentCrosshairSpreadMultiplier + CrosshairSpreadIncrement,
+		MaxCrosshairSpreadMultiplier
+	);
+
+	float MouseX, MouseY;
+	GetMousePosition(MouseX, MouseY);
 
 	FVector WorldLocation, WorldDirection;
-	float CrosshairX, CrosshairY;
-	GetMousePosition(CrosshairX, CrosshairY);
-
 	if (CrosshairWidgetInstance && IsValid(CrosshairWidgetInstance))
 	{
-		FVector2D CrosshairSize = CrosshairWidgetInstance->GetDesiredSize();
-		float CrosshairHalfWidth = (CrosshairSize.X / 2.0f) * CurrentCrosshairSpreadMultiplier;
-		float CrosshairHalfHeight = CrosshairSize.Y / 2.0f;
+		const FVector2D CrosshairSize = CrosshairWidgetInstance->GetDesiredSize();
+		const float CrosshairHalfWidth = (CrosshairSize.X / 2.0f) * CurrentCrosshairSpreadMultiplier;
+		const float CrosshairHalfHeight = (CrosshairSize.Y / 2.0f) * CurrentCrosshairSpreadMultiplier;
 
-		float RandomOffsetX = FMath::RandRange(-CrosshairHalfWidth, CrosshairHalfWidth);
-		float RandomOffsetY = FMath::RandRange(-CrosshairHalfHeight, CrosshairHalfHeight);
+		const float RandomOffsetX = FMath::RandRange(-CrosshairHalfWidth, CrosshairHalfWidth);
+		const float RandomOffsetY = FMath::RandRange(-CrosshairHalfHeight, CrosshairHalfHeight);
 
-		float AdjustedCrosshairX = CrosshairX + RandomOffsetX;
-		float AdjustedCrosshairY = CrosshairY + RandomOffsetY;
+		const float AdjustedMouseX = MouseX + RandomOffsetX;
+		const float AdjustedMouseY = MouseY + RandomOffsetY;
 
-		DeprojectScreenPositionToWorld(AdjustedCrosshairX, AdjustedCrosshairY, WorldLocation, WorldDirection);
+		DeprojectScreenPositionToWorld(AdjustedMouseX, AdjustedMouseY, WorldLocation, WorldDirection);
 	}
 	else
 	{
-		DeprojectScreenPositionToWorld(CrosshairX, CrosshairY, WorldLocation, WorldDirection);
+		DeprojectScreenPositionToWorld(MouseX, MouseY, WorldLocation, WorldDirection);
 	}
+
+	FHitResult Hit;
+	const FVector TraceStart = WorldLocation;
+	const FVector TraceEnd = WorldLocation + (WorldDirection * 100000.0f);
+	const bool bHit = GetWorld()->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_Visibility);
+
+	FVector TargetLocation = bHit ? Hit.ImpactPoint : TraceEnd;
 
 	FVector PawnLocation = ControlledPawn->GetActorLocation();
 	PawnLocation.Z += 50.0f;
+	TargetLocation.Z = PawnLocation.Z;
 
-	FVector CrosshairWorldPos = WorldLocation + WorldDirection * 10000.0f;
-	CrosshairWorldPos.Z = PawnLocation.Z;
-	FVector LaserDirection = (CrosshairWorldPos - PawnLocation).GetSafeNormal();
-
-	FVector LaserStartLocation = PawnLocation + LaserDirection * 50.0f;
-
-	FRotator SpawnActorRotation = LaserDirection.Rotation();
+	const FVector LaserDirection = (TargetLocation - PawnLocation).GetSafeNormal();
+	const FVector LaserStartLocation = PawnLocation + (LaserDirection * 50.0f);
+	const FRotator SpawnActorRotation = LaserDirection.Rotation();
 
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.Owner = ControlledPawn;
 	SpawnParams.Instigator = ControlledPawn;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-	GetWorld()->SpawnActor<AActor>(
-		LaserClass,
-		LaserStartLocation,
-		SpawnActorRotation,
-		SpawnParams
-	);
+	GetWorld()->SpawnActor<AActor>(LaserClass, LaserStartLocation, SpawnActorRotation, SpawnParams);
 }
 
 void AQPlayerController::ShowMainMenu(bool bIsRestart)
@@ -391,19 +389,24 @@ void AQPlayerController::UpdatePlayerRotation()
 		return;
 	}
 
-	FVector WorldLocation, WorldDirection;
-	float MouseX, MouseY;
-	GetMousePosition(MouseX, MouseY);
-	DeprojectScreenPositionToWorld(MouseX, MouseY, WorldLocation, WorldDirection);
+	FHitResult Hit;
+	bool bHit = GetHitResultUnderCursor(ECC_Visibility, false, Hit);
 
-	FVector PawnLocation = ControlledPawn->GetActorLocation();
-	FVector MouseWorldPosition = WorldLocation + WorldDirection * 10000.0f;
-	MouseWorldPosition.Z = PawnLocation.Z;
+	if (bHit)
+	{
+		FVector PawnLocation = ControlledPawn->GetActorLocation();
+		FVector TargetLocation = Hit.ImpactPoint;
 
-	FVector DirectionToMouse = (MouseWorldPosition - PawnLocation).GetSafeNormal();
-	FRotator TargetRotation = DirectionToMouse.Rotation();
+		TargetLocation.Z = PawnLocation.Z;
 
-	ControlledPawn->SetActorRotation(TargetRotation);
+		FVector DirectionToMouse = (TargetLocation - PawnLocation).GetSafeNormal();
+
+		if (!DirectionToMouse.IsNearlyZero())
+		{
+			FRotator TargetRotation = DirectionToMouse.Rotation();
+			ControlledPawn->SetActorRotation(TargetRotation);
+		}
+	}
 }
 
 void AQPlayerController::Tick(float DeltaSeconds)

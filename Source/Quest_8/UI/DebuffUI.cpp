@@ -15,7 +15,6 @@ void UDebuffUI::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 
 void UDebuffUI::ShowDebuff(const FString& DebuffType, float Duration)
 {
-	UE_LOG(LogTemp, Warning, TEXT("Debuff Type: %s, Duration: %f"), *DebuffType, Duration);
 	if (!DebuffBar || !DebuffText)
 	{
 		return;
