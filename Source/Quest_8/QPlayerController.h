@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "GunDataAsset.h"
 #include "InputActionValue.h"
 #include "Templates/SubclassOf.h"
 #include "GameFramework/PlayerController.h"
@@ -63,16 +64,14 @@ public:
 	UPROPERTY()
 	UUserWidget* DebuffWidgetInstance;
 
+	float CurrentCrosshairSpreadMultiplier;
+	float CrosshairSpreadIncrement;
+	float MaxCrosshairSpreadMultiplier;
+	float FireRate;
+	float RecoverTime;
+	float LastFireTime;
+
 	void AddDebuffUI(const FString& Type, float Duration);
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Fire")
-	float CurrentCrosshairSpreadMultiplier = 1.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Fire")
-	float CrosshairSpreadIncrement = 0.1f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Fire")
-	float MaxCrosshairSpreadMultiplier = 2.0f;
 
 	float LastSpreadRecoveryTime;
 
@@ -94,9 +93,6 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Combat")
 	USoundBase* LaserSound;
 
-	float LastFireTime = -1.0f;
-	float FireCooldown = 0.2f;
-
 protected:
 	uint32 bMoveToMouseCursor : 1;
 
@@ -107,11 +103,21 @@ protected:
 	virtual void BeginPlay() override;
 
 	void OnInputStarted();
+	void EquipGun(UGunDataAsset* NewGunData);
 	void RecoverCrosshairSpread();
 	void OnFire();
 	void OnSetDestinationTriggered();
 	void OnSetDestinationReleased();
 	void OnMoveByKeyboard(const FInputActionValue& Value);
+
+	UPROPERTY(EditAnywhere, Category = "Weapon")
+	UGunDataAsset* CurrentGunData;
+
+	UPROPERTY(EditAnywhere, Category = "Weapon")
+	UGunDataAsset* RifleData;
+
+	UPROPERTY(EditAnywhere, Category = "Weapon")
+	UGunDataAsset* ShotgunData;
 
 private:
 	FVector CachedDestination;

@@ -68,12 +68,12 @@ void ADebuffPotion::ActivateItem(AActor* Activator)
 				GetWorld()->GetTimerManager().ClearTimer(CooldownTimerHandle);
 				if (PC)
 				{
-					float RestoredCooldown = FMath::Max(PC->FireCooldown * 0.5f, OriginalCooldown);
-					PC->FireCooldown = RestoredCooldown;
+					float RestoredCooldown = FMath::Max(PC->FireRate * 0.5f, OriginalCooldown);
+					PC->FireRate = RestoredCooldown;
 				}
 			}
 
-			PC->FireCooldown *= 2.0f;
+			PC->FireRate *= 2.0f;
 
 			TWeakObjectPtr<AQPlayerController> WeakPC(PC);
 
@@ -81,8 +81,8 @@ void ADebuffPotion::ActivateItem(AActor* Activator)
 			{
 				if (WeakPC.IsValid())
 				{
-					float RestoredCooldown = FMath::Max(WeakPC->FireCooldown * 0.5f, OriginalCooldown);
-					WeakPC->FireCooldown = RestoredCooldown;
+					float RestoredCooldown = FMath::Max(WeakPC->FireRate * 0.5f, OriginalCooldown);
+					WeakPC->FireRate = RestoredCooldown;
 				}
 			}, 5.0f, false);
 

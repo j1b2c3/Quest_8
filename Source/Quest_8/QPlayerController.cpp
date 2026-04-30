@@ -14,6 +14,7 @@
 #include "Engine/LocalPlayer.h"
 #include "Kismet/GameplayStatics.h"
 #include "UI/DebuffUI.h"
+#include "GunDataAsset.h"
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
@@ -48,18 +49,14 @@ void AQPlayerController::BeginPlay()
 	}
 	else
 	{
-		if (APlayerController* PlayerController = GetWorld()->GetFirstPlayerController())
-		{
-			if (AQPlayerController* QPlayerController = Cast<AQPlayerController>(PlayerController))
-			{
-				QPlayerController->ShowGameHUD();
-			}
-		}
+		ShowGameHUD();
 	}
 
 	FTimerHandle CrosshairSpreadRecoveryTimer;
 	GetWorldTimerManager().SetTimer(CrosshairSpreadRecoveryTimer, this, &AQPlayerController::RecoverCrosshairSpread,
 	                                0.5f, true);
+
+	EquipGun(ShotgunData);
 }
 
 void AQPlayerController::SetupInputComponent()
@@ -97,7 +94,6 @@ void AQPlayerController::SetupInputComponent()
 		EnhancedInputComponent->BindAction(SetShootAction, ETriggerEvent::Triggered, this,
 		                                   &AQPlayerController::OnFire);
 	}
-
 }
 
 void AQPlayerController::ClearWidget()
@@ -130,19 +126,34 @@ void AQPlayerController::OnInputStarted()
 	StopMovement();
 }
 
+void AQPlayerController::EquipGun(UGunDataAsset* NewGunData)
+{
+	if (NewGunData)
+	{
+		CurrentGunData = NewGunData;
+
+		CurrentCrosshairSpreadMultiplier = CurrentGunData->DefaultCrosshairSpreadMultiplier;
+		CrosshairSpreadIncrement = CurrentGunData->CrosshairSpreadIncrement;
+		MaxCrosshairSpreadMultiplier = CurrentGunData->MaxCrosshairSpreadMultiplier;
+		FireRate = CurrentGunData->FireRate;
+		RecoverTime = CurrentGunData->RecoverTime;
+	}
+}
+
 void AQPlayerController::RecoverCrosshairSpread()
 {
 	float CurrentTime = GetWorld()->GetTimeSeconds();
-	if (CurrentTime - LastFireTime >= 0.5f)
+	if (CurrentTime - LastFireTime >= RecoverTime)
 	{
-		CurrentCrosshairSpreadMultiplier = FMath::Max(CurrentCrosshairSpreadMultiplier - 0.2f, 1.0f);
+		CurrentCrosshairSpreadMultiplier = FMath::Max(CurrentCrosshairSpreadMultiplier - 0.2f,
+		                                              CurrentGunData->DefaultCrosshairSpreadMultiplier);
 	}
 }
 
 void AQPlayerController::OnFire()
 {
 	const float CurrentTime = GetWorld()->GetTimeSeconds();
-	if (CurrentTime - LastFireTime < FireCooldown)
+	if (CurrentTime - LastFireTime < FireRate)
 	{
 		return;
 	}
@@ -169,50 +180,55 @@ void AQPlayerController::OnFire()
 		MaxCrosshairSpreadMultiplier
 	);
 
-	float MouseX, MouseY;
-	GetMousePosition(MouseX, MouseY);
+	int32 LoopCount = CurrentGunData ? CurrentGunData->BulletCount : 1;
 
-	FVector WorldLocation, WorldDirection;
-	if (CrosshairWidgetInstance && IsValid(CrosshairWidgetInstance))
+	for (int32 i = 0; i < LoopCount; i++)
 	{
-		const FVector2D CrosshairSize = CrosshairWidgetInstance->GetDesiredSize();
-		const float CrosshairHalfWidth = (CrosshairSize.X / 2.0f) * CurrentCrosshairSpreadMultiplier;
-		const float CrosshairHalfHeight = (CrosshairSize.Y / 2.0f) * CurrentCrosshairSpreadMultiplier;
+		float MouseX, MouseY;
+		GetMousePosition(MouseX, MouseY);
 
-		const float RandomOffsetX = FMath::RandRange(-CrosshairHalfWidth, CrosshairHalfWidth);
-		const float RandomOffsetY = FMath::RandRange(-CrosshairHalfHeight, CrosshairHalfHeight);
+		FVector WorldLocation, WorldDirection;
+		if (CrosshairWidgetInstance && IsValid(CrosshairWidgetInstance))
+		{
+			const FVector2D CrosshairSize = CrosshairWidgetInstance->GetDesiredSize();
+			const float CrosshairHalfWidth = (CrosshairSize.X / 2.0f) * CurrentCrosshairSpreadMultiplier;
+			const float CrosshairHalfHeight = (CrosshairSize.Y / 2.0f) * CurrentCrosshairSpreadMultiplier;
 
-		const float AdjustedMouseX = MouseX + RandomOffsetX;
-		const float AdjustedMouseY = MouseY + RandomOffsetY;
+			const float RandomOffsetX = FMath::RandRange(-CrosshairHalfWidth, CrosshairHalfWidth);
+			const float RandomOffsetY = FMath::RandRange(-CrosshairHalfHeight, CrosshairHalfHeight);
 
-		DeprojectScreenPositionToWorld(AdjustedMouseX, AdjustedMouseY, WorldLocation, WorldDirection);
+			const float AdjustedMouseX = MouseX + RandomOffsetX;
+			const float AdjustedMouseY = MouseY + RandomOffsetY;
+
+			DeprojectScreenPositionToWorld(AdjustedMouseX, AdjustedMouseY, WorldLocation, WorldDirection);
+		}
+		else
+		{
+			DeprojectScreenPositionToWorld(MouseX, MouseY, WorldLocation, WorldDirection);
+		}
+
+		FHitResult Hit;
+		const FVector TraceStart = WorldLocation;
+		const FVector TraceEnd = WorldLocation + (WorldDirection * 100000.0f);
+		const bool bHit = GetWorld()->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_Visibility);
+
+		FVector TargetLocation = bHit ? Hit.ImpactPoint : TraceEnd;
+
+		FVector PawnLocation = ControlledPawn->GetActorLocation();
+		PawnLocation.Z += 50.0f;
+		TargetLocation.Z = PawnLocation.Z;
+
+		const FVector LaserDirection = (TargetLocation - PawnLocation).GetSafeNormal();
+		const FVector LaserStartLocation = PawnLocation + (LaserDirection * 50.0f);
+		const FRotator SpawnActorRotation = LaserDirection.Rotation();
+
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.Owner = ControlledPawn;
+		SpawnParams.Instigator = ControlledPawn;
+		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+		GetWorld()->SpawnActor<AActor>(LaserClass, LaserStartLocation, SpawnActorRotation, SpawnParams);
 	}
-	else
-	{
-		DeprojectScreenPositionToWorld(MouseX, MouseY, WorldLocation, WorldDirection);
-	}
-
-	FHitResult Hit;
-	const FVector TraceStart = WorldLocation;
-	const FVector TraceEnd = WorldLocation + (WorldDirection * 100000.0f);
-	const bool bHit = GetWorld()->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_Visibility);
-
-	FVector TargetLocation = bHit ? Hit.ImpactPoint : TraceEnd;
-
-	FVector PawnLocation = ControlledPawn->GetActorLocation();
-	PawnLocation.Z += 50.0f;
-	TargetLocation.Z = PawnLocation.Z;
-
-	const FVector LaserDirection = (TargetLocation - PawnLocation).GetSafeNormal();
-	const FVector LaserStartLocation = PawnLocation + (LaserDirection * 50.0f);
-	const FRotator SpawnActorRotation = LaserDirection.Rotation();
-
-	FActorSpawnParameters SpawnParams;
-	SpawnParams.Owner = ControlledPawn;
-	SpawnParams.Instigator = ControlledPawn;
-	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
-	GetWorld()->SpawnActor<AActor>(LaserClass, LaserStartLocation, SpawnActorRotation, SpawnParams);
 }
 
 void AQPlayerController::ShowMainMenu(bool bIsRestart)
