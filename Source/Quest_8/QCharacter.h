@@ -10,6 +10,8 @@ class USpringArmComponent;
 class UUserWidget;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnHealthChanged, float, NewHealth);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnCharacterDeath);
+
 
 UCLASS(Blueprintable)
 class AQCharacter : public ACharacter
@@ -21,7 +23,12 @@ public:
 
 	virtual void BeginPlay() override;
 
+	UFUNCTION()
 	void OnDeath();
+	
+	UFUNCTION()
+	void PlayDeathAnimation();
+
 	void AddHealth(float Amount);
 	virtual float TakeDamage(float DamageAmount, const struct FDamageEvent& DamageEvent, AController* EventInstigator,
 	                         AActor* DamageCauser) override;
@@ -35,12 +42,18 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Health")
 	FOnHealthChanged OnHealthChanged;
 
+	UPROPERTY(BlueprintAssignable, Category = "Death")
+	FOnCharacterDeath OnCharacterDeath;
+
 protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
 	float Health;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
 	float MaxHealth;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animation")
+	UAnimMontage* DeathMontage;
 
 private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))

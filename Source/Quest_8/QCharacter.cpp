@@ -53,6 +53,8 @@ void AQCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 	OnHealthChanged.Broadcast(Health);
+
+	OnCharacterDeath.AddDynamic(this, &AQCharacter::PlayDeathAnimation);
 }
 
 void AQCharacter::OnDeath()
@@ -61,6 +63,25 @@ void AQCharacter::OnDeath()
 	if (GameState)
 	{
 		GameState->OnGameOver();
+	}
+}
+
+void AQCharacter::PlayDeathAnimation()
+{
+	if (DeathMontage)
+	{
+		PlayAnimMontage(DeathMontage);
+	}
+
+	if (GetCharacterMovement())
+	{
+		GetCharacterMovement()->DisableMovement();
+	}
+
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		PC->SetIgnoreMoveInput(true);
+		PC->SetIgnoreLookInput(true);
 	}
 }
 
@@ -73,6 +94,11 @@ void AQCharacter::AddHealth(float Amount)
 float AQCharacter::TakeDamage(float DamageAmount, const struct FDamageEvent& DamageEvent, AController* EventInstigator,
                               AActor* DamageCauser)
 {
+	if (Health <= 0.0f)
+	{
+		return 0.0f;
+	}
+
 	float ActualDamage = Super::TakeDamage(DamageAmount, DamageEvent, EventInstigator, DamageCauser);
 
 	Health = FMath::Clamp(Health - ActualDamage, 0.0f, MaxHealth);
@@ -80,6 +106,8 @@ float AQCharacter::TakeDamage(float DamageAmount, const struct FDamageEvent& Dam
 
 	if (Health <= 0.0f)
 	{
+		OnCharacterDeath.Broadcast();
+
 		FTimerHandle DeathTimerHandle;
 		GetWorldTimerManager().SetTimer(DeathTimerHandle, this, &AQCharacter::OnDeath, 1.0f, false);
 	}
